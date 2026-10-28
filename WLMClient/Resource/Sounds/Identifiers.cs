@@ -11,6 +11,5 @@ namespace WLMClient.Resource.Sounds
         public static string ONLINE = "avares://WLMClient/Content/WAV/online.wav";
         public static string NEW_MSG = "avares://WLMClient/Content/WAV/type.wav";
         public static string NUDGE = "avares://WLMClient/Content/WAV/nudge.wav";
-        public static string RING = "avares://WLMClient/Content/WAV/ring.wav";
     }
 }

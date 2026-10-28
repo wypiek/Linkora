@@ -117,6 +117,23 @@ namespace WLMClient.Config
 
         #endregion
 
+        #region Games
+
+        public static IBrush GameCell { get { return Pick(0xFFFFFFFF, 0xFF2A2C31); } }
+
+        public static IBrush GameCellHover { get { return Pick(0xFFEBF3FD, 0xFF2E3542); } }
+
+        public static IBrush GameCellBorder { get { return Pick(0xFFB8D6FB, 0xFF3E4C63); } }
+
+        /// <summary>Behind the three cells that won.</summary>
+        public static IBrush GameHighlight { get { return Pick(0xFFFFF4C2, 0xFF4A4426); } }
+
+        public static IBrush GameMarkX { get { return Pick(0xFF355A88, 0xFF7FB3E8); } }
+
+        public static IBrush GameMarkO { get { return Pick(0xFFC0504D, 0xFFE8857F); } }
+
+        #endregion
+
         /// <summary>
         /// Laid over the photographic header artwork in dark mode. The artwork is a fixed bitmap,
         /// so it is toned down rather than recoloured.

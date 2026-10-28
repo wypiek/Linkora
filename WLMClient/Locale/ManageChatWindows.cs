@@ -121,6 +121,57 @@ namespace WLMClient.Locale
             }
         }
 
+        public static void ReceiveGameSignal(GameSignal gameSignal)
+        {
+            GameSignalType type = (GameSignalType)gameSignal.signal;
+
+            // Only an invitation is worth opening a conversation for; anything else belongs to a
+            // game already showing in an open window.
+            if (type != GameSignalType.invite)
+            {
+                if (IsChatWindowOpen(gameSignal.id))
+                {
+                    GetChatWindow(gameSignal.id).ReceiveGameSignal(gameSignal);
+                }
+
+                return;
+            }
+
+            UserInfo contact = Personal.USER_CONTACTS.FirstOrDefault(x => x.id.Trim() == gameSignal.id.Trim());
+
+            // Strangers, blocked contacts, a game this version does not know, and anybody at all
+            // while appearing offline are turned down without asking.
+            if (contact == null || contact.blocked ||
+                Personal.USER_INFO.status == Convert.ToInt16(UserStatus.Offline) ||
+                !Enum.IsDefined(typeof(GameKind), gameSignal.game))
+            {
+                Network.Client.SendGameSignal(gameSignal.id, GameSignalType.decline, (GameKind)gameSignal.game, 0);
+
+                return;
+            }
+
+            bool isChatWindowOpen = IsChatWindowOpen(gameSignal.id);
+            ChatWindow foundChatWindow = GetChatWindow(gameSignal.id);
+
+            if (foundChatWindow != null)
+            {
+                foundChatWindow.ReceiveGameSignal(gameSignal);
+
+                if (!foundChatWindow.IsActive & Personal.USER_INFO.status == Convert.ToInt16(UserStatus.Available))
+                {
+                    Player.PlaySound(Identifiers.NEW_MSG);
+
+                    if (!isChatWindowOpen)
+                    {
+                        Notification.NotificationManager.Showpopup(foundChatWindow.GetContactName(),
+                            Language.Get("notification.game"), foundChatWindow);
+                    }
+                }
+
+                FlashWindowManager.FlashWindow(foundChatWindow, 5);
+            }
+        }
+
         public static void ReceiveWritingStatus(WritingStatus writingStatus)
         {
             bool isChatWindowOpen = IsChatWindowOpen(writingStatus.id);

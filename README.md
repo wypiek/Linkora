@@ -1,6 +1,6 @@
 # Linkora
 
-A Windows Live Messenger style instant messenger, running on **macOS**, **Linux** and **Windows**.
+A Windows Live Messenger style instant messenger, running on **macOS**, **Linux** and **Windows** (7 and later).
 
 ![Preview1](./Media/wlmclient1.png)
 
@@ -8,11 +8,11 @@ A Windows Live Messenger style instant messenger, running on **macOS**, **Linux*
 + Add / Remove / Block Contact
 + Favourite contacts
 + Send Nudge
++ Games in the conversation window (tic-tac-toe)
 + File attachments in chat
 + Avatars / profile pictures shown in the contact list
 + Interface in your own language
 + Light and dark themes
-+ Voice calls
 + Quick Message
 + Emoticons
 + Sign up page hosted by the server itself
@@ -56,7 +56,11 @@ mysql -u root -p -e "CREATE USER 'wlm'@'localhost' IDENTIFIED BY 'a-strong-passw
 
 ## 2. Server
 
-Open `Messenger.config` next to the `WLMServer` executable and fill in your details:
+The server is one build for every operating system: `dist/server` from a release (see
+"Producing releases"). It needs a [.NET runtime](https://dotnet.microsoft.com/download) installed,
+.NET 6 or newer, and on Linux also OpenSSL.
+
+Open `Messenger.config` next to `WLMServer.dll` and fill in your details:
 
 ```xml
 <appSettings>
@@ -104,10 +108,10 @@ Open `Messenger.config` next to the `WLMServer` executable and fill in your deta
 > `database_password_encryption_iv` exactly 16. These derive the AES key used for stored
 > passwords — changing them later invalidates every existing account password.
 
-Start it:
+Start it from that folder:
 
 ```bash
-./WLMServer
+dotnet WLMServer.dll
 ```
 
 You should see `Local End Point: 0.0.0.0:1323`. Server commands:
@@ -181,33 +185,36 @@ dotnet run --project WLMClient                  # the client
 ### Producing releases
 
 ```bash
-./build-release.sh                   # every target below
-./build-release.sh linux-x64         # a single target
-./build-release.sh portable          # just the portable server
+./build-release.sh                   # every client and the server
+./build-release.sh linux-x64         # a single client
+./build-release.sh win-x86 osx-arm64 # several
+./build-release.sh server            # just the server
 ```
 
-Output lands in `dist/<target>/`, with macOS builds packaged as a `.app` bundle.
+Output lands in `dist/<target>/`, with macOS clients packaged as a `.app` bundle. Only the targets
+being built are replaced; anything else already in `dist/` stays where it is.
 
 | Target                                      | What you get                                                      |
 | ------------------------------------------- | ------------------------------------------------------------------ |
-| `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64` | Self-contained client and server. No .NET needed, ~180 MB each. |
-| `portable`                                  | **One server build for every platform.** ~13 MB, needs the .NET 8 runtime installed. |
+| `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64` | The self-contained client. No .NET needed, ~100 MB each. |
+| `win-x64`, `win-x86`                        | The self-contained client for **Windows 7 SP1 and later**. `win-x86` is 32-bit and runs on any Windows. |
+| `server`                                    | **The server, one build for every OS**, Windows 7 included. ~15 MB, needs any .NET runtime from 6 up installed. |
 
-### One server for macOS and Linux
+### One server for every OS
 
-There is no such thing as a single *native* executable for two operating systems — macOS uses
-Mach-O binaries and Linux uses ELF, which is why the self-contained builds are per-platform.
-
-What you can have is one **portable** build. `dist/portable/server` holds the same files for every
-platform; install the [.NET 8 runtime](https://dotnet.microsoft.com/download) and run:
+There is no such thing as a single *native* executable for several operating systems — macOS uses
+Mach-O binaries, Linux ELF and Windows PE. So the server is not native: `dist/server` holds .NET
+files that run on any of them, on Intel/AMD and ARM alike. It is built against .NET 6 and allowed to
+roll forward, so it starts on whatever .NET is installed: .NET 6 on Windows 7, or 8, 9, 10 anywhere
+else. Install a [.NET runtime](https://dotnet.microsoft.com/download) and run:
 
 ```bash
 dotnet WLMServer.dll
 ```
 
-Worth knowing either way: **a single running server already serves macOS, Linux and Windows
-clients at the same time.** They all speak the same protocol, so you never need more than one
-server no matter what your users run.
+The clients do not come with a server of their own, because **a single running server already
+serves macOS, Linux and Windows clients at the same time.** They all speak the same protocol, so you
+never need more than one server no matter what your users run.
 
 ### Running the macOS build
 
@@ -217,9 +224,28 @@ The app is not code signed, so Gatekeeper blocks it on first launch. Clear the q
 xattr -dr com.apple.quarantine "Linkora.app"
 ```
 
+### Running the Windows build
+
+`client\WLMClient.exe` is the client. Nothing needs installing on Windows 10 or 11.
+
+Windows 7 SP1 needs update **KB3063858** (or the older KB2533623) before the first run. If the
+program then reports `api-ms-win-crt-runtime-l1-1-0.dll` as missing, also install the
+[Visual C++ 2015-2019 Redistributable](https://aka.ms/vs/16/release/vc_redist.x86.exe).
+`README-windows.txt` next to the build has the download links.
+
+**Why Windows 7 works.** .NET 8 does not run on Windows 7; .NET 6 was the last .NET that did. The
+Windows clients and the server are therefore built against .NET 6, switched on by
+`-p:Windows7=true` (see `Directory.Build.props`), while the other clients stay on .NET 8. Microsoft no longer ships
+security fixes for .NET 6, which is the cost of keeping Windows 7 supported. To build the Windows 7
+flavour by hand:
+
+```bash
+dotnet publish WLMClient -c Release -r win-x86 --self-contained -p:Windows7=true
+```
+
 ### Running the Linux build
 
-The **server** needs OpenSSL, which the MySQL connector uses for TLS. Minimal images such as
+The **server** needs OpenSSL on Linux, which the MySQL connector uses for TLS. Minimal images such as
 `debian:12` do not ship it, and without it the server exits with
 *"No usable version of libssl was found"*:
 
@@ -228,7 +254,7 @@ sudo apt install libssl3          # Debian/Ubuntu
 sudo dnf install openssl-libs     # Fedora
 ```
 
-The **client** additionally needs a desktop session, the usual X11/Wayland client libraries and
+The **client** needs a desktop session, the usual X11/Wayland client libraries and
 at least one font:
 
 ```bash
@@ -356,33 +382,23 @@ partial translation is perfectly usable.
 
 ---
 
-# Voice calls
+# Games
 
-The phone button in a conversation places a call. The other side rings, and once they answer you
-can talk. The call window shows who you are speaking to, how long for, and three controls: answer,
-mute and hang up.
+The **Games** button at the top of a conversation lists the games you can play with that contact.
+Pick one and they are invited; the game opens in a column on the right of the conversation on both
+sides, and the window widens so the chat keeps its room.
 
-Audio is captured and played through OpenAL, which ships with the client, so nothing has to be
-installed on the machine. It is 16 kHz mono encoded as G.711 mu-law, about 128 kbit/s each way,
-carried over the same encrypted connection as everything else. The server only passes audio
-between two people who are actually on a call together.
+* **Tic-tac-toe.** Whoever sends the invitation plays X and moves first. When a game ends,
+  **Play again** sends a fresh invitation, so the other person opens the next one if they ask.
+* An invitation that arrives with the conversation closed opens it, with the usual sound and
+  notification.
+* Closing the game, or the conversation, tells the other side you have left. A contact signing
+  out ends the game too.
+* Invitations from blocked contacts, and any invitation while you appear offline, are turned down
+  without asking.
 
-The server also tracks who is on a call, so a second caller is told the line is busy rather than
-making someone's client ring twice, and calling somebody who is not signed in says so. If a client
-disappears mid call the other side is told the call ended rather than being left on a call that
-cannot finish.
-
-On macOS the first call asks for microphone permission. If no microphone or output is found the
-call still connects and says which one is missing.
-
-**Not included.** Camera and screen sharing. Those need video capture and encoding, which is a
-much larger piece of work than audio, so the call window does not pretend to offer them.
-
-### The ringtone
-
-`WLMClient/Content/WAV/ring.wav` is what plays for an incoming call, and it repeats until the call
-is answered, declined or given up on. Replace that file to change it. Keep it as a WAV: the
-platform players that ship with macOS and Linux do not all read Ogg or MP3.
+Both clients check every move against the rules, so neither can make a move the other side's
+board does not allow. The server only passes the moves along and keeps nothing.
 
 ---
 
@@ -488,7 +504,7 @@ After=network.target mysql.service
 Type=simple
 User=wlm
 WorkingDirectory=/opt/wlmserver
-ExecStart=/opt/wlmserver/WLMServer
+ExecStart=/usr/bin/dotnet /opt/wlmserver/WLMServer.dll
 Restart=on-failure
 
 [Install]
@@ -514,13 +530,20 @@ unavailable in that mode, so create accounts with `/create` beforehand or via th
 <dict>
     <key>Label</key><string>net.linkora.server</string>
     <key>ProgramArguments</key>
-    <array><string>/Users/you/wlmserver/WLMServer</string></array>
+    <array>
+        <string>/usr/local/share/dotnet/dotnet</string>
+        <string>/Users/you/wlmserver/WLMServer.dll</string>
+    </array>
     <key>WorkingDirectory</key><string>/Users/you/wlmserver</string>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
 </dict>
 </plist>
 ```
+
+The first path is the .NET runtime; `which dotnet` shows where yours is if it lives elsewhere
+(Homebrew puts it in `/opt/homebrew/bin/dotnet`). The same goes for `/usr/bin/dotnet` in the
+systemd unit above.
 
 ```bash
 launchctl load ~/Library/LaunchAgents/net.linkora.server.plist

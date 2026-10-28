@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>$(LinkoraTargetFramework)</TargetFramework>
     <RootNamespace>WLMData</RootNamespace>
     <AssemblyName>WLMData</AssemblyName>
     <LangVersion>latest</LangVersion>
@@ -12,8 +12,8 @@
 
   <ItemGroup>
     <Compile Include="Data\Deserialize.cs" />
-    <Compile Include="Data\Packets\CallSignal.cs" />
     <Compile Include="Data\Packets\FileTransfer.cs" />
+    <Compile Include="Data\Packets\GameSignal.cs" />
     <Compile Include="Data\Packets\ServerInfo.cs" />
     <Compile Include="Data\Packets\FriendRequestResponse.cs" />
     <Compile Include="Data\Packets\LoginRequest.cs" />
@@ -21,11 +21,11 @@
     <Compile Include="Data\Packets\Message.cs" />
     <Compile Include="Data\Packets\UserInfo.cs" />
     <Compile Include="Data\Packets\UsernameChangeResult.cs" />
-    <Compile Include="Data\Packets\VoiceFrame.cs" />
     <Compile Include="Data\Packets\WritingStatus.cs" />
     <Compile Include="Data\Serializer.cs" />
-    <Compile Include="Enums\CallSignalType.cs" />
     <Compile Include="Enums\FriendRequestResponseCode.cs" />
+    <Compile Include="Enums\GameKind.cs" />
+    <Compile Include="Enums\GameSignalType.cs" />
     <Compile Include="Enums\PacketName.cs" />
     <Compile Include="Enums\UsernameChangeResultCode.cs" />
     <Compile Include="Enums\UserStatus.cs" />

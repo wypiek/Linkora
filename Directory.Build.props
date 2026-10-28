@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Every project builds against .NET 8, except when -p:Windows7=true is passed.
+
+    .NET 8 does not run on Windows 7; .NET 6 was the last release that did, and every package
+    used here still ships a .NET 6 build. build-release.sh passes the switch for the Windows
+    clients, so one build covers Windows 7 SP1 through Windows 11, and for the server, which
+    rolls forward onto any newer runtime so the same files run on every OS.
+  -->
+  <PropertyGroup>
+    <LinkoraTargetFramework>net8.0</LinkoraTargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Windows7)' == 'true'">
+    <LinkoraTargetFramework>net6.0</LinkoraTargetFramework>
+
+    <!-- Kept apart from the normal obj folder so the two restores do not overwrite each other. -->
+    <BaseIntermediateOutputPath>obj\win7\</BaseIntermediateOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
+
+    <!-- .NET 6 is past end of support; that is the price of running on Windows 7. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+  </PropertyGroup>
+
+</Project>

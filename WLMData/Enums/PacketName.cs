@@ -22,14 +22,12 @@ namespace WLMData.Enums
         sendContactDelete,
         sendContactBlock,
         sendWritingStatus,
-        sendGameRequest,
+        sendGameSignal,
         sendPersonalUserUpdate,
         sendFileTransfer,
         requestUsernameChange,
         sendUsernameChangeResult,
-        sendCallSignal,
         requestServerInfo,
-        sendServerInfo,
-        sendVoiceFrame
+        sendServerInfo
     };
 }

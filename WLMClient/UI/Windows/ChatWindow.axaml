@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         x:Class="WLMClient.UI.Windows.ChatWindow"
         Title="chatWindow" Height="510" Width="500" MinHeight="510" MinWidth="450">
-    <Grid>
+    <Grid x:Name="layoutRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="32" />
             <RowDefinition Height="1*" />
@@ -133,14 +133,6 @@
                                HorizontalAlignment="Left" VerticalAlignment="Bottom" UseLayoutRounding="True"
                                RenderOptions.BitmapInterpolationMode="None" RenderOptions.EdgeMode="Aliased"
                                Stretch="Fill"></Image>
-                        <Border x:Name="btnCall" Margin="116 0 0 6" ToolTip.Tip="Call" Width="36" Height="25"
-                                HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="Hand"
-                                Background="Transparent" BorderThickness="1" BorderBrush="Transparent"
-                                CornerRadius="2">
-                            <Path x:Name="btnCallGlyph" Width="15" Height="15" Stretch="Uniform" Fill="#5A5A5A"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center"
-                                  Data="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-                        </Border>
                         <Border x:Name="btnAttach" Margin="79 0 0 6" ToolTip.Tip="Send a file" Width="36" Height="25"
                                 HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="Hand"
                                 Background="Transparent" BorderThickness="1" BorderBrush="Transparent"
@@ -197,7 +189,7 @@
             </Image>
 
             <TextBlock x:Name="txtGame" VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="White"
-                       FontWeight="Bold" FontSize="18">PlaceHolder</TextBlock>
+                       FontWeight="Bold" FontSize="18" TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <Grid Grid.Column="1" Grid.Row="1">

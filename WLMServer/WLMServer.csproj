@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>$(LinkoraTargetFramework)</TargetFramework>
     <RootNamespace>WLMServer</RootNamespace>
     <AssemblyName>WLMServer</AssemblyName>
     <LangVersion>latest</LangVersion>
@@ -10,7 +10,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <RuntimeIdentifiers>osx-arm64;osx-x64;linux-x64;linux-arm64;win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,11 +27,10 @@
     <Compile Include="Network\PacketHandling\ChangeUsername.cs" />
     <Compile Include="Network\PacketHandling\DeleteAndBlockContact.cs" />
     <Compile Include="Network\PacketHandling\PersonalUserUpdate.cs" />
-    <Compile Include="Network\PacketHandling\TransferCall.cs" />
     <Compile Include="Network\PacketHandling\TransferFile.cs" />
+    <Compile Include="Network\PacketHandling\TransferGame.cs" />
     <Compile Include="Network\PacketHandling\TransferMessage.cs" />
     <Compile Include="Network\PacketHandling\TransferNudge.cs" />
-    <Compile Include="Network\PacketHandling\TransferVoice.cs" />
     <Compile Include="Network\PacketHandling\ServerInformation.cs" />
     <Compile Include="Network\PacketHandling\TransferWritingStatus.cs" />
     <Compile Include="Network\Server.cs" />

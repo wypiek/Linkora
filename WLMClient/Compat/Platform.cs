@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Threading;
 
 using Avalonia.Controls;
 
@@ -175,111 +174,6 @@ namespace WLMClient.Compat
             {
                 // A missing audio player must never interrupt the conversation.
                 return null;
-            }
-        }
-
-        /// <summary>
-        /// A sound that repeats until it is stopped, used for the ringtone. The platform players
-        /// have no common "loop" option, so the process is simply started again when it finishes.
-        /// </summary>
-        public sealed class LoopingSound
-        {
-            private readonly string path;
-            private readonly object locker = new object();
-
-            private Process process;
-            private bool stopped;
-
-            public LoopingSound(string path)
-            {
-                this.path = path;
-            }
-
-            public void Start()
-            {
-                Thread thread = new Thread(Run);
-                thread.IsBackground = true;
-                thread.Name = "Looping sound";
-                thread.Start();
-            }
-
-            private void Run()
-            {
-                while (true)
-                {
-                    lock (locker)
-                    {
-                        if (stopped)
-                        {
-                            return;
-                        }
-                    }
-
-                    Process started = StartPlayer(path);
-
-                    if (started == null)
-                    {
-                        return;
-                    }
-
-                    lock (locker)
-                    {
-                        if (stopped)
-                        {
-                            KillQuietly(started);
-
-                            return;
-                        }
-
-                        process = started;
-                    }
-
-                    try
-                    {
-                        started.WaitForExit();
-                    }
-                    catch
-                    {
-                        return;
-                    }
-
-                    lock (locker)
-                    {
-                        process = null;
-                    }
-                }
-            }
-
-            public void Stop()
-            {
-                lock (locker)
-                {
-                    stopped = true;
-
-                    KillQuietly(process);
-
-                    process = null;
-                }
-            }
-
-            private static void KillQuietly(Process value)
-            {
-                if (value == null)
-                {
-                    return;
-                }
-
-                try
-                {
-                    if (!value.HasExited)
-                    {
-                        value.Kill();
-                    }
-                }
-                catch
-                {
-                    // Already gone.
-                }
             }
         }
 

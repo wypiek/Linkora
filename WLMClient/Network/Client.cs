@@ -30,7 +30,7 @@ namespace WLMClient.Network
         private static Action<ServerInfo> pendingServerInfo;
 
         private static PacketHandler connectionedClosed, authentication, receiveContact, receiveMessage, receiveNudge,
-            receiveContactDelete, receiveWritingStatus, receiveFriendRequest, personalUserUpdate, receiveFile, receiveUsernameChange, receiveCallSignal, receiveVoiceFrame, receiveServerInfo;
+            receiveContactDelete, receiveWritingStatus, receiveFriendRequest, personalUserUpdate, receiveFile, receiveUsernameChange, receiveGameSignal, receiveServerInfo;
 
         public static void Load(MainWindow mainWindow)
         {
@@ -45,8 +45,7 @@ namespace WLMClient.Network
             receiveWritingStatus = new ReceiveWritingStatus(mainWindow);
             receiveFile = new ReceiveFile(mainWindow);
             receiveUsernameChange = new ReceiveUsernameChange(mainWindow);
-            receiveCallSignal = new ReceiveCallSignal(mainWindow);
-            receiveVoiceFrame = new ReceiveVoiceFrame(mainWindow);
+            receiveGameSignal = new ReceiveGameSignal(mainWindow);
             receiveServerInfo = new ReceiveServerInfo(mainWindow);
 
             Personal.USER_CONTACTS = new List<UserInfo>();
@@ -186,16 +185,10 @@ namespace WLMClient.Network
             SendPacket(PacketName.sendFileTransfer.ToString(), new FileTransfer(userID, fileName, data));
         }
 
-        /// <summary>Sends a slice of call audio to the other party.</summary>
-        public static void SendVoiceFrame(string userID, byte[] data)
+        /// <summary>Sends one step of a game played in a conversation to a contact.</summary>
+        public static void SendGameSignal(string userID, GameSignalType signal, GameKind game, int value)
         {
-            SendPacket(PacketName.sendVoiceFrame.ToString(), new VoiceFrame(userID, data));
-        }
-
-        /// <summary>Sends one step of a call's setup or teardown to a contact.</summary>
-        public static void SendCallSignal(string userID, WLMData.Enums.CallSignalType signal)
-        {
-            SendPacket(PacketName.sendCallSignal.ToString(), new CallSignal(userID, (int)signal));
+            SendPacket(PacketName.sendGameSignal.ToString(), new GameSignal(userID, (int)signal, (int)game, value));
         }
 
         /// <summary>Asks the server to change the name this account signs in with.</summary>

@@ -37,31 +37,6 @@ namespace WLMClient.Resource.Sounds
             }
         }
 
-        /// <summary>
-        /// Starts a sound repeating until the returned handle is stopped. Used for the ringtone.
-        /// </summary>
-        public static Platform.LoopingSound StartLoop(string url)
-        {
-            try
-            {
-                string path = GetExtractedPath(url);
-
-                if (path == null)
-                {
-                    return null;
-                }
-
-                Platform.LoopingSound sound = new Platform.LoopingSound(path);
-                sound.Start();
-
-                return sound;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         private static string GetExtractedPath(string url)
         {
             lock (locker)

@@ -167,7 +167,6 @@ namespace WLMClient.UI.Windows
             if (pageLogin == null)
             {
                 Locale.ManageChatWindows.CloseAllOpenChatWindows();
-                Locale.CallManager.Reset();
                 Locale.Conversations.Clear();
 
                 pageMain = null;

@@ -25,13 +25,9 @@ namespace WLMServer.Network
     {
         public string version = "1.0.0";
         private Dictionary<Connection, ConnectedUser> users;
-
-        /// <summary>Who is currently on a call with whom, keyed both ways.</summary>
-        private readonly Dictionary<string, string> activeCalls =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private PacketHandler authentication, addNewContact, addNewContactResponse, personalUserUpdate,
             deleteAndBlockContact, transferMessage, transferNudge, transferWritingStatus, transferFile,
-            changeUsername, transferCall, transferVoice, serverInformation;
+            changeUsername, transferGame, serverInformation;
         private WebServer webServer;
         public AccountManager accountManager;
 
@@ -49,8 +45,7 @@ namespace WLMServer.Network
             transferWritingStatus = new PacketHandling.TransferWritingStatus(this);
             transferFile = new PacketHandling.TransferFile(this);
             changeUsername = new PacketHandling.ChangeUsername(this);
-            transferCall = new PacketHandling.TransferCall(this);
-            transferVoice = new PacketHandling.TransferVoice(this);
+            transferGame = new PacketHandling.TransferGame(this);
             serverInformation = new PacketHandling.ServerInformation(this);
 
             accountManager = new AccountManager();
@@ -157,20 +152,6 @@ namespace WLMServer.Network
                     SendUpdateToUsersContactList(connection, user);
 
                     users.Remove(connection);
-
-                    // Otherwise the other party would be left on a call that cannot end.
-                    string peer = EndCall(user.id);
-
-                    if (peer != null)
-                    {
-                        Connection peerConnection = GetConnectionFromUserID(peer);
-
-                        if (peerConnection != null)
-                        {
-                            SendPacket(peerConnection, PacketName.sendCallSignal.ToString(),
-                                new CallSignal(user.id, (int)WLMData.Enums.CallSignalType.end));
-                        }
-                    }
                 }
             }
         }
@@ -309,66 +290,6 @@ namespace WLMServer.Network
                 }
             }
         }
-
-        #region Calls
-
-        public bool IsInCall(string userId)
-        {
-            lock (activeCalls)
-            {
-                return activeCalls.ContainsKey(userId.Trim());
-            }
-        }
-
-        /// <summary>Whether these two are on a call with each other right now.</summary>
-        public bool IsCallBetween(string first, string second)
-        {
-            if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(second))
-            {
-                return false;
-            }
-
-            lock (activeCalls)
-            {
-                string peer;
-
-                return activeCalls.TryGetValue(first.Trim(), out peer) &&
-                    string.Equals(peer, second.Trim(), StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        /// <summary>Marks two users as being on a call together.</summary>
-        public void BeginCall(string first, string second)
-        {
-            lock (activeCalls)
-            {
-                activeCalls[first.Trim()] = second.Trim();
-                activeCalls[second.Trim()] = first.Trim();
-            }
-        }
-
-        /// <summary>
-        /// Clears a call and returns who the other party was, so they can be told it is over.
-        /// </summary>
-        public string EndCall(string userId)
-        {
-            lock (activeCalls)
-            {
-                string peer;
-
-                if (!activeCalls.TryGetValue(userId.Trim(), out peer))
-                {
-                    return null;
-                }
-
-                activeCalls.Remove(userId.Trim());
-                activeCalls.Remove(peer);
-
-                return peer;
-            }
-        }
-
-        #endregion
 
         /// <summary>
         /// Moves a signed in user to a new name. The account row is already renamed by this point;

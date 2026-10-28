@@ -25,6 +25,8 @@ using WLMData.Enums;
 using WLMData.Data.Packets;
 using WLMClient.Locale;
 using WLMClient.UI.Data;
+using WLMClient.UI.Controls;
+using WLMClient.UI.Controls.Dialogs;
 
 using RichTextBox = WLMClient.Compat.RichTextBox;
 using BrushConverter = WLMClient.Compat.BrushConverter;
@@ -39,6 +41,7 @@ namespace WLMClient.UI.Windows
         private DateTime lastMessageReceivedDateTime;
         private UserInfo contactUserInfo;
         private StackPanel emoticonPanel;
+        private GamePanel gamePanel;
         private string lastMessageFrom;
         private bool textInputChanged;
         private bool isMouseHoveringEmoticonPanel;
@@ -101,9 +104,7 @@ namespace WLMClient.UI.Windows
 
         private void WireEvents()
         {
-            SizeChanged += Window_SizeChanged;
             Closing += Window_Closing;
-            Loaded += Window_Loaded;
 
             AddHandler(InputElement.PointerPressedEvent, Window_PreviewMouseDown, RoutingStrategies.Tunnel);
 
@@ -123,47 +124,12 @@ namespace WLMClient.UI.Windows
             btnNudge.PointerPressed += btnNudge_PreviewMouseLeftButtonDown;
             btnNudge.PointerReleased += btnNudge_PreviewMouseLeftButtonUp;
 
-            imageUserFrame.PointerPressed += imageUserFrame_PreviewMouseDown;
             imageUserFrame.PointerReleased += imageUserFrame_PreviewMouseUp;
-            imageUserFrame.PointerExited += imageUserFrame_MouseLeave;
 
             btnAttach.PointerEntered += btnAttach_MouseEnter;
             btnAttach.PointerExited += btnAttach_MouseLeave;
             btnAttach.PointerReleased += btnAttach_PreviewMouseLeftButtonUp;
-
-            btnCall.PointerEntered += btnCall_MouseEnter;
-            btnCall.PointerExited += btnCall_MouseLeave;
-            btnCall.PointerReleased += btnCall_PreviewMouseLeftButtonUp;
         }
-
-        #region Calls
-
-        private void btnCall_MouseEnter(object sender, PointerEventArgs e)
-        {
-            btnCall.BorderBrush = new BrushConverter().ConvertFrom("#AFAFAF");
-            btnCall.Background = new BrushConverter().ConvertFrom("#EDEDED");
-        }
-
-        private void btnCall_MouseLeave(object sender, PointerEventArgs e)
-        {
-            btnCall.BorderBrush = Brushes.Transparent;
-            btnCall.Background = Brushes.Transparent;
-        }
-
-        private void btnCall_PreviewMouseLeftButtonUp(object sender, PointerReleasedEventArgs e)
-        {
-            if ((UserStatus)contactUserInfo.status == UserStatus.Offline)
-            {
-                MessageBox.Show(Language.Format("call.offline", contactUserInfo.name),
-                    Language.Get("call.cannotcall"), MessageBoxButton.OK, MessageBoxImage.Information);
-
-                return;
-            }
-
-            CallManager.Place(contactUserInfo);
-        }
-
-        #endregion
 
         #region Attachments
 
@@ -371,10 +337,17 @@ namespace WLMClient.UI.Windows
         {
             btnGame.Content = Language.Get("chat.games");
 
+            ToolTip.SetTip(imageUserFrame, Language.Get("chat.changepicture"));
+
+            if (gamePanel != null)
+            {
+                txtGame.Text = GamePanel.GameName(gamePanel.Kind);
+                gamePanel.ApplyLanguage();
+            }
+
             ToolTip.SetTip(btnSmiley, Language.Get("chat.smilies"));
             ToolTip.SetTip(btnNudge, Language.Get("chat.nudge"));
             ToolTip.SetTip(btnAttach, Language.Get("chat.sendfile"));
-            ToolTip.SetTip(btnCall, Language.Get("call.start"));
 
             txtStatus.Text = "(" + Language.GetStatus((UserStatus)contactUserInfo.status) + ")";
         }
@@ -395,7 +368,6 @@ namespace WLMClient.UI.Windows
             composeTailDark.Background = Config.Theme.ComposeBackground;
 
             btnAttachGlyph.Fill = Config.Theme.TextSecondary;
-            btnCallGlyph.Fill = Config.Theme.TextSecondary;
 
             txtSend.Background = Config.Theme.ComposeBackground;
             txtSend.Foreground = Config.Theme.ChatText;
@@ -405,6 +377,11 @@ namespace WLMClient.UI.Windows
 
             txtName.Foreground = Config.Theme.TextPrimary;
             txtStatus.Foreground = Config.Theme.TextPrimary;
+
+            if (gamePanel != null)
+            {
+                gamePanel.ApplyTheme();
+            }
         }
 
         public string GetContactID()
@@ -567,6 +544,11 @@ namespace WLMClient.UI.Windows
             imagePartnerFrame.Source = LoadResource.GetAvatarFrameFromStatus((UserStatus)userInfo.status, AvatarSize.Big);
 
             contactUserInfo = userInfo;
+
+            if (gamePanel != null && userInfo.status == (int)UserStatus.Offline)
+            {
+                gamePanel.ContactSignedOut();
+            }
         }
 
         private void LoadEmoticonPanel()
@@ -610,6 +592,13 @@ namespace WLMClient.UI.Windows
             {
                 isWindowClosing = true;
 
+                // Closed by the user rather than by signing out, so the connection is still there
+                // to tell the contact the game is off.
+                if (gamePanel != null)
+                {
+                    gamePanel.Quit();
+                }
+
                 ManageChatWindows.RemoveChatWindow(this);
             }
         }
@@ -626,11 +615,6 @@ namespace WLMClient.UI.Windows
             this.Close();
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-
-        }
-
         private void Window_PreviewMouseDown(object sender, PointerPressedEventArgs e)
         {
             if (emoticonPanel != null)
@@ -642,29 +626,124 @@ namespace WLMClient.UI.Windows
             }
         }
 
-        private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
+        #region Games
 
-        }
-
+        /// <summary>Lists the games that can be played with this contact.</summary>
         private void btnGame_Click(object sender, RoutedEventArgs e)
         {
+            ContextMenu menu = new ContextMenu();
 
+            foreach (GameKind kind in Enum.GetValues(typeof(GameKind)))
+            {
+                MenuItem item = new MenuItem();
+
+                item.Header = GamePanel.GameName(kind);
+                item.Click += (s, args) => StartGame(kind);
+
+                // One game at a time with any one contact.
+                item.IsEnabled = gamePanel == null || !gamePanel.IsActive;
+
+                menu.Items.Add(item);
+            }
+
+            menu.Open(btnGame);
         }
 
+        private void StartGame(GameKind kind)
+        {
+            if (gamePanel != null && gamePanel.IsActive)
+            {
+                return;
+            }
+
+            ShowGamePanel(kind).Invite();
+
+            AddNudgeMessage(Language.Format("game.invite.sent", contactUserInfo.name, GamePanel.GameName(kind)));
+        }
+
+        /// <summary>A game signal from this contact, already checked by <see cref="ManageChatWindows"/>.</summary>
+        public void ReceiveGameSignal(GameSignal signal)
+        {
+            GameKind kind = (GameKind)signal.game;
+
+            if ((GameSignalType)signal.signal == GameSignalType.invite)
+            {
+                // An invitation to something else replaces whatever was going on before.
+                if (gamePanel != null && gamePanel.Kind != kind)
+                {
+                    gamePanel.Quit();
+                    HideGamePanel();
+                }
+
+                ShowGamePanel(kind).ReceiveInvite();
+
+                AddNudgeMessage(Language.Format("game.invite.received", contactUserInfo.name, GamePanel.GameName(kind)));
+
+                return;
+            }
+
+            if (gamePanel != null && gamePanel.Kind == kind)
+            {
+                gamePanel.Receive(signal);
+            }
+        }
+
+        /// <summary>Opens the game column, widening the window so the conversation keeps its room.</summary>
+        private GamePanel ShowGamePanel(GameKind kind)
+        {
+            if (gamePanel != null && gamePanel.Kind == kind)
+            {
+                return gamePanel;
+            }
+
+            gamePanel = new GamePanel(contactUserInfo.id, () => contactUserInfo.name, kind);
+            gamePanel.CloseRequested += HideGamePanel;
+
+            gameDock.Children.Clear();
+            gameDock.Children.Add(gamePanel);
+
+            txtGame.Text = GamePanel.GameName(kind);
+
+            ColumnDefinition column = layoutRoot.ColumnDefinitions[1];
+
+            if (column.Width.Value == 0)
+            {
+                column.Width = new GridLength(GamePanel.PanelWidth);
+
+                if (WindowState == WindowState.Normal)
+                {
+                    Width += GamePanel.PanelWidth;
+                }
+            }
+
+            return gamePanel;
+        }
+
+        private void HideGamePanel()
+        {
+            gamePanel = null;
+
+            gameDock.Children.Clear();
+
+            ColumnDefinition column = layoutRoot.ColumnDefinitions[1];
+
+            if (column.Width.Value != 0)
+            {
+                column.Width = new GridLength(0);
+
+                if (WindowState == WindowState.Normal)
+                {
+                    Width = Math.Max(MinWidth, Width - GamePanel.PanelWidth);
+                }
+            }
+        }
+
+        #endregion
+
+        /// <summary>Your own picture is changed in Options, so its frame opens them.</summary>
         private void imageUserFrame_PreviewMouseUp(object sender, PointerReleasedEventArgs e)
         {
-
-        }
-
-        private void imageUserFrame_PreviewMouseDown(object sender, PointerPressedEventArgs e)
-        {
-
-        }
-
-        private void imageUserFrame_MouseLeave(object sender, PointerEventArgs e)
-        {
-
+            new FrmOptions().ShowDialog(null);
         }
 
         private void txtSend_TextChanged(object sender, EventArgs e)
