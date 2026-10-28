@@ -168,6 +168,7 @@ namespace WLMClient.UI.Windows
             {
                 Locale.ManageChatWindows.CloseAllOpenChatWindows();
                 Locale.Conversations.Clear();
+                Locale.ChatHistory.Clear();
 
                 pageMain = null;
                 controlPanel.Children.Clear();

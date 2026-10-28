@@ -7,7 +7,8 @@ namespace WLMClient.Locale
     /// The most recent message exchanged with each contact, used for the contact list's second
     /// line when a contact has no personal message set.
     ///
-    /// This only covers the current session; the application keeps no message history.
+    /// This only covers the current session. The conversations themselves are in
+    /// <see cref="ChatHistory"/>.
     /// </summary>
     static class Conversations
     {

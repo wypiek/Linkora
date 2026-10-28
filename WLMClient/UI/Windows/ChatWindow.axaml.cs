@@ -49,6 +49,12 @@ namespace WLMClient.UI.Windows
         private bool isShiftDown;
         private bool isWritingMessage;
 
+        /// <summary>
+        /// Set while the conversation so far is being put back on screen, so those lines are not
+        /// recorded a second time.
+        /// </summary>
+        private bool isReplayingHistory;
+
         /// <summary>Lets the ported code keep calling <c>window.Dispatcher.Invoke(...)</c>.</summary>
         public Dispatcher Dispatcher
         {
@@ -95,6 +101,8 @@ namespace WLMClient.UI.Windows
 
             UpdatePersonal();
             UpdateContact(userInfo);
+
+            ReplayHistory();
 
             Thread threadParseInputText = new Thread(TextInputParser);
             threadParseInputText.IsBackground = true;
@@ -231,6 +239,15 @@ namespace WLMClient.UI.Windows
         /// </summary>
         private void AddAttachmentMessage(string from, string fileName, string path, long size)
         {
+            Remember(new ChatHistory.Entry
+            {
+                Kind = ChatHistory.Kind.Attachment,
+                From = from,
+                Text = fileName,
+                Path = path,
+                Size = size
+            });
+
             if (lastMessageFrom != from)
             {
                 Paragraph txtFrom = new Paragraph();
@@ -384,6 +401,69 @@ namespace WLMClient.UI.Windows
             }
         }
 
+        #region History
+
+        private void Remember(ChatHistory.Entry entry)
+        {
+            if (isReplayingHistory)
+            {
+                return;
+            }
+
+            entry.Time = DateTime.Now;
+
+            ChatHistory.Add(contactUserInfo.id, entry);
+        }
+
+        /// <summary>
+        /// Puts back what was said in this conversation earlier in the session. A window is thrown
+        /// away when it is closed, so without this a conversation reopened - by hand, or by the
+        /// next message arriving - started out empty.
+        /// </summary>
+        private void ReplayHistory()
+        {
+            List<ChatHistory.Entry> entries = ChatHistory.Get(contactUserInfo.id);
+
+            if (entries.Count == 0)
+            {
+                return;
+            }
+
+            isReplayingHistory = true;
+
+            try
+            {
+                foreach (ChatHistory.Entry entry in entries)
+                {
+                    switch (entry.Kind)
+                    {
+                        case ChatHistory.Kind.Message:
+                            if (entry.From == contactUserInfo.name)
+                            {
+                                lastMessageReceivedDateTime = entry.Time;
+                            }
+
+                            AddChatMessage(entry.From, entry.Text);
+                            break;
+
+                        case ChatHistory.Kind.Notice:
+                            AddNudgeMessage(entry.Text);
+                            break;
+
+                        case ChatHistory.Kind.Attachment:
+                            AddAttachmentMessage(entry.From, entry.Text, entry.Path, entry.Size);
+                            break;
+                    }
+                }
+            }
+            finally
+            {
+                isReplayingHistory = false;
+            }
+        }
+
+        #endregion
+
         public string GetContactID()
         {
             return contactUserInfo.id;
@@ -414,6 +494,13 @@ namespace WLMClient.UI.Windows
 
         public void AddChatMessage(string from, string messageText)
         {
+            if (from == contactUserInfo.name && !isReplayingHistory)
+            {
+                lastMessageReceivedDateTime = DateTime.Now;
+            }
+
+            Remember(new ChatHistory.Entry { Kind = ChatHistory.Kind.Message, From = from, Text = messageText });
+
             if (from == contactUserInfo.name)
             {
                 txtLastUpdate.Document.Blocks.Clear();
@@ -877,6 +964,8 @@ namespace WLMClient.UI.Windows
 
         public void AddNudgeMessage(string text)
         {
+            Remember(new ChatHistory.Entry { Kind = ChatHistory.Kind.Notice, Text = text });
+
             lastMessageFrom = "";
 
             Paragraph txtText = new Paragraph();

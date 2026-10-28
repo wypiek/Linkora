@@ -95,7 +95,12 @@ namespace WLMClient.UI.Controls
             txtQuickMessage.AddHandler(InputElement.KeyDownEvent, txtQuickMessage_PreviewKeyDown,
                 RoutingStrategies.Tunnel);
             txtQuickMessage.KeyUp += txtQuickMessage_PreviewKeyUp;
-            txtQuickMessage.PointerPressed += txtQuickMessage_PreviewMouseLeftButtonDown;
+
+            // Tunnelling as well: the text box handles its own pointer presses, so an ordinary
+            // handler never ran, the box was never marked as being edited, and taking focus
+            // promptly gave it away again - nothing typed ever reached it.
+            txtQuickMessage.AddHandler(InputElement.PointerPressedEvent,
+                txtQuickMessage_PreviewMouseLeftButtonDown, RoutingStrategies.Tunnel);
             txtQuickMessage.LostFocus += txtQuickMessage_LostKeyboardFocus;
             txtQuickMessage.GotFocus += txtQuickMessage_GotKeyboardFocus;
 
@@ -198,13 +203,15 @@ namespace WLMClient.UI.Controls
 
         private void txtQuickMessage_PreviewMouseLeftButtonDown(object sender, PointerPressedEventArgs e)
         {
+            // Marked first: focusing the box runs GotFocus straight away, which gives the focus up
+            // again and puts the placeholder back unless an edit is already under way.
+            isCommentBeingEdited = true;
+
             if (Personal.USER_INFO.comment.Length == 0)
             {
                 txtQuickMessage.Clear();
                 txtQuickMessage.Focus();
             }
-
-            isCommentBeingEdited = true;
         }
 
         private void txtQuickMessage_LostKeyboardFocus(object sender, RoutedEventArgs e)

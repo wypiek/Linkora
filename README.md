@@ -325,8 +325,14 @@ own picture, which carries their status: green for available, red for busy, oran
 silver for offline. Contacts without a picture get the default one from the sign in page.
 
 Underneath their name is either their personal message, or, when they have not set one, the most
-recent message exchanged with them. That preview covers the current session only, since the
-application keeps no message history.
+recent message exchanged with them. That preview covers the current session only.
+
+Closing a conversation window does not lose the conversation: open it again, or let the next
+message open it, and everything said since you signed in is still there. It is kept in memory
+only, nothing is written to disk, and signing out forgets it.
+
+The **Share a quick message** box at the top sets your personal message: click it, type, and press
+Enter. Escape leaves it as it was.
 
 Right click a contact and choose **Add to Favourites** to pin them. Favourites are listed in
 their own group above everyone else, and both groups can be collapsed by clicking the heading.
