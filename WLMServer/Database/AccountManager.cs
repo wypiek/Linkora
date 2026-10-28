@@ -15,13 +15,16 @@ namespace WLMServer.Database
     {
         public void UpdateAccount(string id, string name, string comment, string avatar)
         {
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", id);
-            cmd.Parameters.AddWithValue("@1", name);
-            cmd.Parameters.AddWithValue("@2", comment);
-            cmd.Parameters.AddWithValue("@3", avatar);
+            lock (databaseLocker)
+            {
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", id);
+                cmd.Parameters.AddWithValue("@1", name);
+                cmd.Parameters.AddWithValue("@2", comment);
+                cmd.Parameters.AddWithValue("@3", avatar);
 
-            Write("UPDATE account SET name=@1, comment=@2, avatar=@3 WHERE id=@0", cmd);
+                Write("UPDATE account SET name=@1, comment=@2, avatar=@3 WHERE id=@0", cmd);
+            }
         }
 
         /// <summary>
@@ -64,45 +67,48 @@ namespace WLMServer.Database
         /// </summary>
         public bool RenameAccount(string oldId, string newId)
         {
-            CheckDatabaseAccess();
-
-            MySqlTransaction transaction = dbConnection.BeginTransaction();
-
-            try
+            lock (databaseLocker)
             {
-                Execute(transaction, "UPDATE account SET id=@new WHERE id=@old", oldId, newId);
+                CheckDatabaseAccess();
 
-                // Replace the "[id," token rather than the bare name, so an account whose name is a
-                // prefix of another ("bob" against "bobby") is left alone.
-                Execute(transaction,
-                    "UPDATE account SET contacts = REPLACE(contacts, CONCAT('[', @old, ','), CONCAT('[', @new, ','))" +
-                    " WHERE contacts LIKE CONCAT('%[', @old, ',%')", oldId, newId);
-
-                Execute(transaction, "UPDATE friend_requests SET requesterID=@new WHERE requesterID=@old", oldId, newId);
-                Execute(transaction, "UPDATE friend_requests SET targetID=@new WHERE targetID=@old", oldId, newId);
-
-                transaction.Commit();
-
-                return true;
-            }
-            catch (Exception exception)
-            {
-                Program.WriteToConsole("Renaming '" + oldId + "' failed, nothing was changed: " + exception.Message);
+                MySqlTransaction transaction = dbConnection.BeginTransaction();
 
                 try
                 {
-                    transaction.Rollback();
-                }
-                catch
-                {
-                    // Nothing further to do; the transaction never committed.
-                }
+                    Execute(transaction, "UPDATE account SET id=@new WHERE id=@old", oldId, newId);
 
-                return false;
-            }
-            finally
-            {
-                transaction.Dispose();
+                    // Replace the "[id," token rather than the bare name, so an account whose name is a
+                    // prefix of another ("bob" against "bobby") is left alone.
+                    Execute(transaction,
+                        "UPDATE account SET contacts = REPLACE(contacts, CONCAT('[', @old, ','), CONCAT('[', @new, ','))" +
+                        " WHERE contacts LIKE CONCAT('%[', @old, ',%')", oldId, newId);
+
+                    Execute(transaction, "UPDATE friend_requests SET requesterID=@new WHERE requesterID=@old", oldId, newId);
+                    Execute(transaction, "UPDATE friend_requests SET targetID=@new WHERE targetID=@old", oldId, newId);
+
+                    transaction.Commit();
+
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    Program.WriteToConsole("Renaming '" + oldId + "' failed, nothing was changed: " + exception.Message);
+
+                    try
+                    {
+                        transaction.Rollback();
+                    }
+                    catch
+                    {
+                        // Nothing further to do; the transaction never committed.
+                    }
+
+                    return false;
+                }
+                finally
+                {
+                    transaction.Dispose();
+                }
             }
         }
 
@@ -123,182 +129,209 @@ namespace WLMServer.Database
 
         public void InsertNewAccount(string username, string password)
         {
-            password = PasswordEncrypter.GetEncryptedPassword(password);
+            lock (databaseLocker)
+            {
+                password = PasswordEncrypter.GetEncryptedPassword(password);
 
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", username);
-            cmd.Parameters.AddWithValue("@1", password);
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", username);
+                cmd.Parameters.AddWithValue("@1", password);
 
-            Write("INSERT INTO account VALUES(@0, 'New User', @1, '', '', '')", cmd);
+                Write("INSERT INTO account VALUES(@0, 'New User', @1, '', '', '')", cmd);
+            }
         }
 
         public bool IsUserInDatabase(string userID)
         {
-            bool returnValue = false;
-
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", userID);
-
-            MySqlDataReader reader = Read("SELECT id FROM account WHERE id=@0", cmd);
-            while (reader.Read())
+            lock (databaseLocker)
             {
-                if (reader.GetString("id") == userID)
+                bool returnValue = false;
+
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", userID);
+
+                MySqlDataReader reader = Read("SELECT id FROM account WHERE id=@0", cmd);
+                while (reader.Read())
                 {
-                    returnValue = true;
-                    break;
+                    if (reader.GetString("id") == userID)
+                    {
+                        returnValue = true;
+                        break;
+                    }
                 }
+
+                reader.Close();
+
+                return returnValue;
             }
-
-            reader.Close();
-
-            return returnValue;
         }
 
         public bool AuthenticateAccount(string username, string password, out UserInfo userInfo)
         {
-            bool returnValue = false;
-            userInfo = null;
-
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", username);
-            cmd.Parameters.AddWithValue("@1", password);
-
-            string encryptedPassword = PasswordEncrypter.GetEncryptedPassword(password);
-
-            MySqlDataReader reader = Read("SELECT * FROM account WHERE id=@0", cmd);
-            while (reader.Read())
+            lock (databaseLocker)
             {
-                if (reader.GetString("password").Equals(encryptedPassword))
+                bool returnValue = false;
+                userInfo = null;
+
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", username);
+                cmd.Parameters.AddWithValue("@1", password);
+
+                string encryptedPassword = PasswordEncrypter.GetEncryptedPassword(password);
+
+                MySqlDataReader reader = Read("SELECT * FROM account WHERE id=@0", cmd);
+                while (reader.Read())
                 {
-                    // Only return userInfo if the password is correct.
-                    userInfo = new UserInfo(reader.GetString("id"), reader.GetString("name"), reader.GetString("comment"), 1, reader.GetString("avatar"), false);
-
-                    if (!Config.Properties.AVATAR_ENABLE)
+                    if (reader.GetString("password").Equals(encryptedPassword))
                     {
-                        userInfo.avatar = "";
-                    }
-                    else
-                    {
-                        Uri baseUri = new Uri(Config.Properties.AVATAR_IMAGE_URL);
-                        Uri address = new Uri(baseUri, userInfo.avatar);
+                        // Only return userInfo if the password is correct.
+                        userInfo = new UserInfo(reader.GetString("id"), reader.GetString("name"), reader.GetString("comment"), 1, reader.GetString("avatar"), false);
 
-                        userInfo.avatar = address.ToString();
+                        if (!Config.Properties.AVATAR_ENABLE)
+                        {
+                            userInfo.avatar = "";
+                        }
+                        else
+                        {
+                            Uri baseUri = new Uri(Config.Properties.AVATAR_IMAGE_URL);
+                            Uri address = new Uri(baseUri, userInfo.avatar);
+
+                            userInfo.avatar = address.ToString();
+                        }
+
+                        returnValue = true;
                     }
 
-                    returnValue = true;
+                    break;
                 }
 
-                break;
+                reader.Close();
+                return returnValue;
             }
-
-            reader.Close();
-            return returnValue;
         }
 
         public UserInfo GetUser(string id)
         {
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", id);
-
-            MySqlDataReader reader = Read("SELECT * FROM account WHERE id=@0", cmd);
-
-            UserInfo userInfo = null;
-            while (reader.Read())
+            lock (databaseLocker)
             {
-                userInfo = new UserInfo(reader.GetString("id"),
-                    reader.GetString("name"), reader.GetString("comment"), 0, reader.GetString("avatar"), false);
-                break;
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", id);
+
+                MySqlDataReader reader = Read("SELECT * FROM account WHERE id=@0", cmd);
+
+                UserInfo userInfo = null;
+                while (reader.Read())
+                {
+                    userInfo = new UserInfo(reader.GetString("id"),
+                        reader.GetString("name"), reader.GetString("comment"), 0, reader.GetString("avatar"), false);
+                    break;
+                }
+
+                reader.Close();
+
+                if (userInfo == null)
+                {
+                    // No such account. Callers already handle a null user, and dereferencing here
+                    // would take the whole server down.
+                    return null;
+                }
+
+                if (!Config.Properties.AVATAR_ENABLE)
+                {
+                    userInfo.avatar = "";
+                }
+                else
+                {
+                    Uri baseUri = new Uri(Config.Properties.AVATAR_IMAGE_URL);
+                    Uri address = new Uri(baseUri, userInfo.avatar);
+
+                    userInfo.avatar = address.ToString();
+                }
+
+                return userInfo;
             }
-
-            reader.Close();
-
-            if (userInfo == null)
-            {
-                // No such account. Callers already handle a null user, and dereferencing here
-                // would take the whole server down.
-                return null;
-            }
-
-            if (!Config.Properties.AVATAR_ENABLE)
-            {
-                userInfo.avatar = "";
-            }
-            else
-            {
-                Uri baseUri = new Uri(Config.Properties.AVATAR_IMAGE_URL);
-                Uri address = new Uri(baseUri, userInfo.avatar);
-
-                userInfo.avatar = address.ToString();
-            }
-
-            return userInfo;
         }
 
         public List<string> GetFriendRequests(string requesterID)
         {
-            List<string> requests = new List<string>();
-
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", requesterID);
-
-            MySqlDataReader reader = Read("SELECT requesterID FROM friend_requests WHERE targetID=@0", cmd);
-
-            while (reader.Read())
+            lock (databaseLocker)
             {
-                requests.Add(reader.GetString("requesterID"));
+                List<string> requests = new List<string>();
 
-                break;
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", requesterID);
+
+                MySqlDataReader reader = Read("SELECT requesterID FROM friend_requests WHERE targetID=@0", cmd);
+
+                while (reader.Read())
+                {
+                    requests.Add(reader.GetString("requesterID"));
+
+                    break;
+                }
+
+                reader.Close();
+
+                return requests;
             }
-
-            reader.Close();
-
-            return requests;
         }
 
         public string GetContacts(string id)
         {
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", id);
-
-            string contacts = "";
-            MySqlDataReader reader = Read("SELECT contacts FROM account WHERE id=@0", cmd);
-            while (reader.Read())
+            lock (databaseLocker)
             {
-                contacts = reader.GetString("contacts");
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", id);
 
-                break;
+                string contacts = "";
+                MySqlDataReader reader = Read("SELECT contacts FROM account WHERE id=@0", cmd);
+                while (reader.Read())
+                {
+                    contacts = reader.GetString("contacts");
+
+                    break;
+                }
+
+                reader.Close();
+
+                return contacts;
             }
-
-            reader.Close();
-
-            return contacts;
         }
 
         public void SaveContactData(string id, string contactData)
         {
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", id);
-            cmd.Parameters.AddWithValue("@1", contactData);
+            lock (databaseLocker)
+            {
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", id);
+                cmd.Parameters.AddWithValue("@1", contactData);
 
-            Write("UPDATE account SET contacts=@1 WHERE id=@0", cmd);
+                Write("UPDATE account SET contacts=@1 WHERE id=@0", cmd);
+            }
         }
 
         public void AddNewFriendRequest(string requesterID, string targetID)
         {
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", requesterID);
-            cmd.Parameters.AddWithValue("@1", targetID);
+            lock (databaseLocker)
+            {
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", requesterID);
+                cmd.Parameters.AddWithValue("@1", targetID);
 
-            Write("INSERT INTO friend_requests VALUES(@0, @1)", cmd);
+                Write("INSERT INTO friend_requests VALUES(@0, @1)", cmd);
+            }
         }
 
         public void RemoveFriendRequest(string requesterID, string targetID)
         {
-            MySqlCommand cmd = new MySqlCommand();
-            cmd.Parameters.AddWithValue("@0", requesterID);
-            cmd.Parameters.AddWithValue("@1", targetID);
+            lock (databaseLocker)
+            {
+                MySqlCommand cmd = new MySqlCommand();
+                cmd.Parameters.AddWithValue("@0", requesterID);
+                cmd.Parameters.AddWithValue("@1", targetID);
 
-            Write("DELETE FROM friend_requests WHERE requesterID=@0 AND targetID=@1", cmd);
+                Write("DELETE FROM friend_requests WHERE requesterID=@0 AND targetID=@1", cmd);
+            }
         }
     }
 }
