@@ -312,6 +312,7 @@ namespace WLMClient.Locale
             { "login.rememberpassword", "Remember my password" },
             { "login.autosignin", "Sign me in automatically" },
             { "login.button", "Sign in" },
+            { "login.signingin", "Signing in\u2026" },
             { "login.server.needed.title", "Server address needed" },
             { "login.server.needed.text", "Enter the address of the Linkora server you want to sign in to.\n\nFor example 127.0.0.1, chat.example.com, or chat.example.com:1323." },
             { "login.signup.needed.text", "Enter the address of the server you want to sign up on first." },
@@ -424,6 +425,8 @@ namespace WLMClient.Locale
             { "error.server.text", "'{0}' could not be found.\n\nCheck the server address on the sign in page." },
             { "error.connection.title", "Unable to connect to server." },
             { "error.connection.text", "Linkora was not able to contact the server. Please check your internet connection." },
+            { "error.unreachable.title", "Unable to reach the server" },
+            { "error.unreachable.text", "Linkora could not connect to {0}.\n\nThe server may be offline, or a firewall may be blocking port {1}." },
             { "error.signup.title", "Server address needed" },
 
             { "notification.signedin", "has just signed in." },

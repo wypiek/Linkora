@@ -33,6 +33,9 @@ namespace WLMClient.UI.Controls
         /// </summary>
         private int signUpRequest;
 
+        /// <summary>Whether a connection to the server is being made in the background.</summary>
+        private bool isConnecting;
+
         public Login()
         {
             InitializeComponent();
@@ -129,7 +132,7 @@ namespace WLMClient.UI.Controls
             checkRememberMe.Content = Language.Get("login.rememberme");
             checkRememberMyPassword.Content = Language.Get("login.rememberpassword");
             checkSignInAutomatically.Content = Language.Get("login.autosignin");
-            btnLogin.Content = Language.Get("login.button");
+            btnLogin.Content = Language.Get(isConnecting ? "login.signingin" : "login.button");
 
             ToolTip.SetTip(txtServer, Language.Get("login.server.tooltip"));
         }
@@ -177,6 +180,11 @@ namespace WLMClient.UI.Controls
 
         private void btnLogin_Click(object sender, RoutedEventArgs e)
         {
+            if (isConnecting)
+            {
+                return;
+            }
+
             string host;
             int port;
 
@@ -210,12 +218,30 @@ namespace WLMClient.UI.Controls
 
             SaveDataManager.SaveConfiguration(loginConfiguration);
 
-            if (!Network.Client.Connect())
-            {
-                return;
-            }
+            string id = txtId.Text ?? "";
+            string password = txtPass.Password;
+            short status = Convert.ToInt16(selectedUserStatus);
 
-            Network.Client.AuthenticateUser(txtId.Text ?? "", txtPass.Password, Convert.ToInt16(selectedUserStatus));
+            SetConnecting(true);
+
+            Network.Client.ConnectInBackground(connected =>
+            {
+                SetConnecting(false);
+
+                if (connected)
+                {
+                    Network.Client.AuthenticateUser(id, password, status);
+                }
+            });
+        }
+
+        /// <summary>Shows that a connection is being made, and stops a second one starting alongside it.</summary>
+        private void SetConnecting(bool connecting)
+        {
+            isConnecting = connecting;
+
+            btnLogin.IsEnabled = !connecting;
+            btnLogin.Content = Language.Get(connecting ? "login.signingin" : "login.button");
         }
 
 
@@ -249,13 +275,13 @@ namespace WLMClient.UI.Controls
                 return;
             }
 
-            Config.Properties.SERVER_ADDRESS = host;
-            Config.Properties.SERVER_PORT = port;
-
-            if (!Network.Client.Connect())
+            if (isConnecting)
             {
                 return;
             }
+
+            Config.Properties.SERVER_ADDRESS = host;
+            Config.Properties.SERVER_PORT = port;
 
             int request = ++signUpRequest;
 
@@ -263,13 +289,31 @@ namespace WLMClient.UI.Controls
 
             string typedServer = txtServer.Text;
 
-            Network.Client.RequestServerInfo(info =>
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => SignUpAnswer(request, typedServer, info)));
+            SetConnecting(true);
 
-            // A server too old to know the question, or one that never answers, must not leave the
-            // link saying it is still asking.
-            Avalonia.Threading.DispatcherTimer.RunOnce(() => SignUpAnswer(request, typedServer, null),
-                TimeSpan.FromSeconds(5));
+            Network.Client.ConnectInBackground(connected =>
+            {
+                SetConnecting(false);
+
+                if (!connected)
+                {
+                    if (request == signUpRequest)
+                    {
+                        signUpRequest = 0;
+                        txtSignUp.Text = Language.Get("login.signup");
+                    }
+
+                    return;
+                }
+
+                Network.Client.RequestServerInfo(info =>
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => SignUpAnswer(request, typedServer, info)));
+
+                // A server too old to know the question, or one that never answers, must not leave
+                // the link saying it is still asking.
+                Avalonia.Threading.DispatcherTimer.RunOnce(() => SignUpAnswer(request, typedServer, null),
+                    TimeSpan.FromSeconds(5));
+            });
         }
 
         /// <summary>Acts on what the server said about signing up, or on it having said nothing.</summary>

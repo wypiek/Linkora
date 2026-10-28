@@ -123,3 +123,6 @@ game.left = {0} opuszcza grę.
 game.unavailable = {0} nie jest zalogowany(-a).
 game.signedout = {0} wylogował(a) się.
 notification.game = chce zagrać w grę.
+login.signingin = Logowanie…
+error.unreachable.title = Nie można połączyć się z serwerem
+error.unreachable.text = Linkora nie może połączyć się z {0}.\n\nSerwer może być wyłączony albo zapora blokuje port {1}.

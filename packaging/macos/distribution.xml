@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The universal Linkora installer for macOS, assembled by build-release.sh with productbuild.
+
+  A .NET application cannot be a single universal binary: its runtime files differ between
+  Apple silicon and Intel. So the package carries both builds and installs the one that suits
+  the Mac it runs on. @VERSION@ is filled in by the build.
+-->
+<installer-gui-script minSpecVersion="2">
+    <title>Linkora</title>
+    <options hostArchitectures="arm64,x86_64" customize="never" require-scripts="false" />
+    <domains enable_localSystem="true" />
+    <os-version min="11.0" />
+
+    <script>
+    <![CDATA[
+    // Asked of the hardware rather than of this process, so Apple silicon gets its own build
+    // even if the installer itself runs under Rosetta.
+    function isAppleSilicon() {
+        return system.sysctl('hw.optional.arm64') == 1;
+    }
+    ]]>
+    </script>
+
+    <choices-outline>
+        <line choice="arm64" />
+        <line choice="x64" />
+    </choices-outline>
+
+    <choice id="arm64" title="Linkora for Apple silicon" visible="false"
+            selected="isAppleSilicon()" enabled="false">
+        <pkg-ref id="net.linkora.client.arm64" />
+    </choice>
+
+    <choice id="x64" title="Linkora for Intel" visible="false"
+            selected="!isAppleSilicon()" enabled="false">
+        <pkg-ref id="net.linkora.client.x64" />
+    </choice>
+
+    <pkg-ref id="net.linkora.client.arm64" version="@VERSION@" onConclusion="none">Linkora-arm64.pkg</pkg-ref>
+    <pkg-ref id="net.linkora.client.x64" version="@VERSION@" onConclusion="none">Linkora-x64.pkg</pkg-ref>
+</installer-gui-script>

@@ -185,17 +185,35 @@ dotnet run --project WLMClient                  # the client
 ### Producing releases
 
 ```bash
-./build-release.sh                   # every client and the server
-./build-release.sh linux-x64         # a single client
-./build-release.sh win-x86 osx-arm64 # several
-./build-release.sh server            # just the server
+./build-release.sh                       # the installers, the Linux clients and the server
+./build-release.sh installers            # all three installers
+./build-release.sh installer-windows7    # just one installer
+./build-release.sh linux-x64             # a plain client folder
+./build-release.sh server                # just the server
 ```
 
-Output lands in `dist/<target>/`, with macOS clients packaged as a `.app` bundle. Only the targets
-being built are replaced; anything else already in `dist/` stays where it is.
+Installers land in `dist/installers/`; everything else in `dist/<target>/`, with macOS clients
+packaged as a `.app` bundle. Only the targets being built are replaced; anything else already in
+`dist/` stays where it is. The Windows installers need `makensis` (`brew install makensis`); the
+macOS one uses `pkgbuild` and `productbuild`, which come with macOS.
+
+| Installer                                   | For                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| `Linkora-<version>-Windows7-Setup.exe`      | Windows 7 SP1 and later, 32 and 64-bit. Built on .NET 6, the last .NET Windows 7 runs. |
+| `Linkora-<version>-Windows10-11-Setup.exe`  | Windows 10 and 11, x64 and ARM64. Built on .NET 8, which still gets security fixes. |
+| `Linkora-<version>-macOS-Universal.pkg`     | macOS 11 and later, Apple silicon and Intel. |
+
+Each installer carries a build per processor and installs the one that suits the machine. The
+Windows ones install for the current user, with no administrator prompt, add Start menu and
+desktop shortcuts and an entry in Add or Remove Programs, and keep `Messenger.config` and the saved
+sign in details when installed over an earlier version. The Windows 7 installer also checks for
+update KB3063858 and offers its download page when it is missing. The macOS package installs
+`Linkora.app` into Applications; it is not signed, so open it with right click → Open the first
+time. The installer sources are in `packaging/`.
 
 | Target                                      | What you get                                                      |
 | ------------------------------------------- | ------------------------------------------------------------------ |
+| `installers`                                | The three installers above. |
 | `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64` | The self-contained client. No .NET needed, ~100 MB each. |
 | `win-x64`, `win-x86`                        | The self-contained client for **Windows 7 SP1 and later**. `win-x86` is 32-bit and runs on any Windows. |
 | `server`                                    | **The server, one build for every OS**, Windows 7 included. ~15 MB, needs any .NET runtime from 6 up installed. |
@@ -560,6 +578,12 @@ Allow inbound TCP on your `server_port` (1323 by default) if clients connect fro
 **"Unable to connect to any of the specified MySQL hosts"**
 The database is unreachable or the credentials are wrong. Check `database_host`, `database_id`
 and `database_password`, and that MySQL accepts connections from the server's address.
+
+**"Unable to reach the server" when signing in, although the sign up page works**
+Signing up is a web page, but signing in is a raw TCP connection on `server_port` (1323), and
+that has to get through on its own. Check that the port is open in every firewall in front of the
+server, cloud provider's included. A domain behind Cloudflare's proxy (the orange cloud) only
+passes web traffic, so give clients a DNS only name or the server's IP to sign in with.
 
 **Sign in does nothing / client immediately drops the connection**
 Almost always a mismatch between the server's `server_encryption_key` and the client's compiled

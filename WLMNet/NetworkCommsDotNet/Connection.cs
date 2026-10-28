@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 using NetworkCommsDotNet.DPSBase;
 
 namespace NetworkCommsDotNet
@@ -27,8 +29,15 @@ namespace NetworkCommsDotNet
     /// </summary>
     public class ConnectionInfo
     {
-        public IPEndPoint RemoteEndPoint { get; private set; }
+        public IPEndPoint RemoteEndPoint { get; internal set; }
         public IPEndPoint LocalEndPoint { get; private set; }
+
+        /// <summary>
+        /// Every address the name resolved to, in the order to try them. A name commonly has
+        /// several, often IPv6 and IPv4 at once, and the first is not always one this machine can
+        /// reach.
+        /// </summary>
+        internal IPAddress[] Candidates { get; private set; }
 
         /// <summary>Set once a connection has been created for this info, so lookups can reuse it.</summary>
         internal Connections.Connection AttachedConnection { get; set; }
@@ -36,24 +45,53 @@ namespace NetworkCommsDotNet
         public ConnectionInfo(string address, int port)
         {
             IPAddress parsed;
-            if (!IPAddress.TryParse(address, out parsed))
+            if (IPAddress.TryParse(address, out parsed))
             {
-                IPAddress[] resolved = Dns.GetHostAddresses(address);
+                Candidates = new[] { parsed };
+            }
+            else
+            {
+                IPAddress[] resolved = Dns.GetHostAddresses(ToAsciiHost(address));
                 if (resolved.Length == 0)
                 {
                     throw new ArgumentException("Unable to resolve address '" + address + "'.");
                 }
 
-                parsed = resolved[0];
+                Candidates = resolved;
             }
 
-            RemoteEndPoint = new IPEndPoint(parsed, port);
+            RemoteEndPoint = new IPEndPoint(Candidates[0], port);
         }
 
         internal ConnectionInfo(IPEndPoint remoteEndPoint, IPEndPoint localEndPoint)
         {
             RemoteEndPoint = remoteEndPoint;
             LocalEndPoint = localEndPoint;
+            Candidates = new[] { remoteEndPoint.Address };
+        }
+
+        /// <summary>
+        /// A name typed in its own script ("chat.example.みんな") becomes the punycode form DNS
+        /// expects ("chat.example.xn--q9jyb4c"). A name already in ASCII is left as it is.
+        /// </summary>
+        private static string ToAsciiHost(string host)
+        {
+            foreach (char character in host)
+            {
+                if (character > 127)
+                {
+                    try
+                    {
+                        return new IdnMapping().GetAscii(host);
+                    }
+                    catch (ArgumentException)
+                    {
+                        return host;
+                    }
+                }
+            }
+
+            return host;
         }
 
         public override string ToString()
@@ -246,11 +284,61 @@ namespace NetworkCommsDotNet.Connections
             get { return !closed; }
         }
 
-        /// <summary>Opens a client connection to the endpoint described by <paramref name="info"/>.</summary>
+        /// <summary>
+        /// How long to wait for each address to answer. A firewall that drops packets rather than
+        /// refusing them gives no answer at all, and the operating system's own limit is a minute
+        /// or more.
+        /// </summary>
+        public static TimeSpan ConnectTimeout = TimeSpan.FromSeconds(8);
+
+        /// <summary>
+        /// Opens a client connection to the endpoint described by <paramref name="info"/>, trying
+        /// each address the name resolved to until one answers.
+        /// </summary>
         internal static Connection Connect(ConnectionInfo info)
         {
-            TcpClient client = new TcpClient();
-            client.Connect(info.RemoteEndPoint);
+            int port = info.RemoteEndPoint.Port;
+
+            TcpClient client = null;
+            Exception lastFailure = null;
+
+            foreach (IPAddress address in info.Candidates)
+            {
+                TcpClient attempt = new TcpClient(address.AddressFamily);
+
+                try
+                {
+                    Task connecting = attempt.ConnectAsync(address, port);
+
+                    // Observed even if abandoned below, so a late failure is not reported as unobserved.
+                    connecting.ContinueWith(t => { Exception ignored = t.Exception; },
+                        TaskContinuationOptions.OnlyOnFaulted);
+
+                    if (!connecting.Wait(ConnectTimeout))
+                    {
+                        throw new TimeoutException("No answer from " + new IPEndPoint(address, port) + ".");
+                    }
+
+                    client = attempt;
+                    info.RemoteEndPoint = new IPEndPoint(address, port);
+
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    attempt.Close();
+
+                    AggregateException aggregate = exception as AggregateException;
+                    lastFailure = aggregate != null && aggregate.InnerException != null
+                        ? aggregate.InnerException
+                        : exception;
+                }
+            }
+
+            if (client == null)
+            {
+                throw lastFailure ?? new SocketException((int)SocketError.HostUnreachable);
+            }
 
             Connection connection = new Connection(client);
             info.AttachedConnection = connection;

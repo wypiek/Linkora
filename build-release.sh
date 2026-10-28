@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 #
-# Builds Linkora releases: a self-contained client for each operating system, and one portable
-# server that runs on all of them.
+# Builds Linkora releases: installers for the client, plain client folders, and one portable
+# server that runs on every operating system.
 #
 # The clients need no .NET runtime installed on the target machine. The server needs one (.NET 6
-# or newer), which is what lets a single build serve every operating system. The Windows clients
-# run on Windows 7 SP1 and every later version. Results land in dist/.
+# or newer), which is what lets a single build serve every operating system. Results land in dist/.
 #
 # Usage:  ./build-release.sh [target ...]
-#         ./build-release.sh                 # every client and the server
-#         ./build-release.sh osx-arm64       # just one client
-#         ./build-release.sh server          # just the server
+#         ./build-release.sh                       # the installers, the Linux clients and the server
+#         ./build-release.sh installers            # every installer below
+#         ./build-release.sh installer-windows7    # Windows 7 SP1 and later, 32 and 64-bit (.NET 6)
+#         ./build-release.sh installer-windows10   # Windows 10 and 11, x64 and ARM64 (.NET 8)
+#         ./build-release.sh installer-macos       # macOS, one package for Apple silicon and Intel
+#         ./build-release.sh osx-arm64             # a plain client folder for one platform
+#         ./build-release.sh server                # just the server
+#
+# The installers land in dist/installers. makensis (brew install makensis) builds the Windows
+# ones; the macOS one needs pkgbuild and productbuild, which come with macOS.
 #
 # Only the targets being built are replaced; anything else already in dist/ is left alone.
 #
@@ -18,7 +24,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-DEFAULT_TARGETS=(osx-arm64 osx-x64 linux-x64 linux-arm64 win-x64 win-x86 server)
+DEFAULT_TARGETS=(installers linux-x64 linux-arm64 server)
 TARGETS=("${@:-}")
 
 if [ -z "${TARGETS[0]:-}" ]; then
@@ -55,14 +61,22 @@ VERSION="1.1.0"
 BUILD_STAMP="$(date +%Y%m%d)"
 INFORMATIONAL_VERSION="${VERSION}+build.${BUILD_STAMP}"
 
+INSTALLERS="$DIST/installers"
+STAGING="$DIST/.staging"
+
+# The third argument picks the framework for a Windows build: "windows7" (the default for win-*)
+# builds against .NET 6, the last release that runs on Windows 7; "windows10" against .NET 8.
+# See Directory.Build.props.
 publish_client() {
-    local rid="$1" out="$2"
+    local rid="$1" out="$2" windows="${3:-windows7}"
     local extra=()
 
-    # .NET 8 does not run on Windows 7, so Windows builds use .NET 6 - the last release that does.
-    # See Directory.Build.props.
     case "$rid" in
-        win-*) extra+=(-p:Windows7=true) ;;
+        win-*)
+            if [ "$windows" = "windows7" ]; then
+                extra+=(-p:Windows7=true)
+            fi
+            ;;
     esac
 
     dotnet publish WLMClient/WLMClient.csproj \
@@ -135,7 +149,116 @@ PLIST
     chmod +x "$bundle/Contents/MacOS/WLMClient"
 }
 
+# One Windows installer carrying a build per architecture; it installs whichever suits the PC.
+build_windows_installer() {
+    local flavor="$1"
+    local rids file
+    local defines=()
+
+    if [ "$flavor" = "windows7" ]; then
+        rids=(win-x86 win-x64)
+        file="$INSTALLERS/${APP_NAME}-${VERSION}-Windows7-Setup.exe"
+    else
+        rids=(win-x64 win-arm64)
+        file="$INSTALLERS/${APP_NAME}-${VERSION}-Windows10-11-Setup.exe"
+    fi
+
+    echo "==> Building the $flavor installer"
+
+    for rid in "${rids[@]}"; do
+        local out="$STAGING/$flavor-$rid"
+
+        clear_dir "$out"
+        echo "    client for $rid..."
+        publish_client "$rid" "$out" "$flavor"
+
+        case "$rid" in
+            win-x86) defines+=("-DX86DIR=$PWD/$out") ;;
+            win-x64) defines+=("-DX64DIR=$PWD/$out") ;;
+            win-arm64) defines+=("-DARM64DIR=$PWD/$out") ;;
+        esac
+    done
+
+    mkdir -p "$INSTALLERS"
+
+    echo "    packaging $(basename "$file")..."
+    makensis -V2 -NOCD \
+        "-DVERSION=$VERSION" \
+        "-DFLAVOR=$flavor" \
+        "-DOUTFILE=$PWD/$file" \
+        "-DICON=$PWD/WLMClient/Linkora.ico" \
+        "-DCONFIG=$PWD/WLMClient/Messenger.config" \
+        "${defines[@]}" \
+        packaging/windows/linkora.nsi
+
+    echo "    done: $file"
+}
+
+# One macOS package carrying the Apple silicon and the Intel app; it installs whichever suits the
+# Mac. A .NET app cannot be a single universal binary, since its runtime differs per processor.
+build_macos_installer() {
+    local work="$STAGING/macos"
+    local file="$INSTALLERS/${APP_NAME}-${VERSION}-macOS-Universal.pkg"
+
+    echo "==> Building the macOS installer"
+
+    clear_dir "$work"
+    mkdir -p "$work"
+
+    for rid in osx-arm64 osx-x64; do
+        local arch="${rid#osx-}"
+
+        echo "    client for $rid..."
+        publish_client "$rid" "$work/publish-$arch"
+        make_app_bundle "$work/publish-$arch" "$work/root-$arch/${APP_NAME}.app" \
+            "WLMClient/Content/Icons/33.png"
+
+        # Installed exactly where asked. Left relocatable, macOS would put the update wherever
+        # it last saw an app with this identifier - a build folder, say.
+        pkgbuild --analyze --root "$work/root-$arch" "$work/component-$arch.plist" >/dev/null
+        plutil -replace 0.BundleIsRelocatable -bool NO "$work/component-$arch.plist"
+
+        pkgbuild --quiet \
+            --root "$work/root-$arch" \
+            --component-plist "$work/component-$arch.plist" \
+            --identifier "${BUNDLE_ID}.${arch}" \
+            --version "$VERSION" \
+            --install-location /Applications \
+            "$work/${APP_NAME}-${arch}.pkg"
+    done
+
+    sed "s/@VERSION@/$VERSION/g" packaging/macos/distribution.xml > "$work/distribution.xml"
+
+    mkdir -p "$INSTALLERS"
+
+    echo "    packaging $(basename "$file")..."
+    productbuild --quiet --distribution "$work/distribution.xml" --package-path "$work" "$file"
+
+    echo "    done: $file"
+}
+
 for name in "${TARGETS[@]}"; do
+    case "$name" in
+        installers)
+            build_windows_installer windows7
+            build_windows_installer windows10
+            build_macos_installer
+            continue
+            ;;
+        installer-windows7)
+            build_windows_installer windows7
+            continue
+            ;;
+        installer-windows10)
+            build_windows_installer windows10
+            continue
+            ;;
+        installer-macos)
+            build_macos_installer
+            continue
+            ;;
+    esac
+
     target="$DIST/$name"
 
     clear_dir "$target"
@@ -251,6 +374,8 @@ TXT
 
     echo "    done: $target"
 done
+
+clear_dir "$STAGING"
 
 echo
 echo "Build complete. Output:"

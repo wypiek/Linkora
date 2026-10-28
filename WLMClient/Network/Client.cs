@@ -4,6 +4,9 @@ using System.Linq;
 using System.Text;
 
 using System.Net;
+using System.Threading.Tasks;
+
+using Avalonia.Threading;
 
 using WLMClient.Compat;
 
@@ -60,10 +63,15 @@ namespace WLMClient.Network
         }
 
         /// <summary>
-        /// Prepares a connection to the configured server. Returns false when the address cannot be
-        /// resolved, which is a normal mistake now that the user types it on the sign in page.
+        /// Looks up the configured server and opens the connection on a background thread, then
+        /// calls <paramref name="finished"/> on the UI thread with whether it worked, having
+        /// already told the user why if it did not.
+        ///
+        /// Both steps used to run on the UI thread when Sign in was clicked. A server behind a
+        /// firewall that drops packets gives no answer at all, so the window froze until the
+        /// operating system gave up a minute or more later.
         /// </summary>
-        public static bool Connect()
+        public static void ConnectInBackground(Action<bool> finished)
         {
             ((ConnectionClosed)connectionedClosed).Close();
 
@@ -71,22 +79,55 @@ namespace WLMClient.Network
 
             ((ConnectionClosed)connectionedClosed).Open();
 
-            try
+            connectionInfo = null;
+
+            string address = Config.Properties.SERVER_ADDRESS;
+            int port = Config.Properties.SERVER_PORT;
+
+            Task.Run(() =>
             {
-                connectionInfo = new ConnectionInfo(Config.Properties.SERVER_ADDRESS, Config.Properties.SERVER_PORT);
+                ConnectionInfo info = null;
+                bool resolved = false;
 
-                return true;
-            }
-            catch
-            {
-                connectionInfo = null;
+                try
+                {
+                    info = new ConnectionInfo(address, port);
+                    resolved = true;
 
-                MessageBox.Show(
-                    Locale.Language.Format("error.server.text", Config.Properties.SERVER_ADDRESS),
-                    Locale.Language.Get("error.server.title"), MessageBoxButton.OK, MessageBoxImage.Error);
+                    TCPConnection.GetConnection(info);
+                }
+                catch
+                {
+                    info = null;
+                }
 
-                return false;
-            }
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (info == null)
+                    {
+                        if (!resolved)
+                        {
+                            MessageBox.Show(Locale.Language.Format("error.server.text", address),
+                                Locale.Language.Get("error.server.title"), MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                        else
+                        {
+                            MessageBox.Show(
+                                Locale.Language.Format("error.unreachable.text",
+                                    Config.Properties.FormatServer(address, port), port),
+                                Locale.Language.Get("error.unreachable.title"), MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+
+                        finished(false);
+
+                        return;
+                    }
+
+                    connectionInfo = info;
+
+                    finished(true);
+                });
+            });
         }
 
         public static void SendPacket(string packetType, object packetData)

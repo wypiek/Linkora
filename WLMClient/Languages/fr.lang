@@ -123,3 +123,6 @@ game.left = {0} a quitté la partie.
 game.unavailable = {0} n'est pas connecté.
 game.signedout = {0} s'est déconnecté.
 notification.game = veut faire une partie.
+login.signingin = Connexion…
+error.unreachable.title = Serveur injoignable
+error.unreachable.text = Linkora n'a pas pu se connecter à {0}.\n\nLe serveur est peut-être hors ligne, ou un pare-feu bloque le port {1}.

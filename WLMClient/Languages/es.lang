@@ -123,3 +123,6 @@ game.left = {0} ha salido del juego.
 game.unavailable = {0} no ha iniciado sesión.
 game.signedout = {0} ha cerrado sesión.
 notification.game = quiere jugar una partida.
+login.signingin = Iniciando sesión…
+error.unreachable.title = No se puede contactar con el servidor
+error.unreachable.text = Linkora no ha podido conectar con {0}.\n\nPuede que el servidor esté desconectado o que un cortafuegos bloquee el puerto {1}.
